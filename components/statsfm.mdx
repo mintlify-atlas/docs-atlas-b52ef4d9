@@ -1,0 +1,186 @@
+---
+title: 'StatsFM'
+description: 'A widget that fetches and displays the current or most recently played track from the Stats.fm API, with album art ambilight glow, accent color extraction, and scrolling text for long names.'
+keywords: ['stats.fm', 'music', 'now playing', 'widget', 'spotify', 'album art', 'accent', 'component']
+---
+
+The `StatsFM` widget shows live music activity on the home page. It polls the Stats.fm API every 20 seconds, extracts the dominant color from the album art to update the site's accent color, and resolves Spotify deep links for the track, album, and each artist. Long track and artist names scroll horizontally using `ScrollingText`.
+
+## Source
+
+`src/lib/components/widgets/StatsFM.svelte`
+
+## Props
+
+The `StatsFM` component accepts **no props**. The Stats.fm username is read from `siteConfig.statsFmUser` in `$lib/config.js`.
+
+## Dependencies
+
+| Import | Purpose |
+|---|---|
+| `$lib/config.js` — `siteConfig` | Provides the Stats.fm username |
+| `$lib/state.svelte.js` — `themeState` | Shared reactive object updated with the extracted accent color |
+| `../ui/ScrollingText.svelte` | Scrolls track name and artist name if they overflow |
+| `svelte/transition` — `fade` | Fades loading, error, and data states in and out |
+| `$app/environment` — `browser` | Guards DOM and `sessionStorage` access |
+
+## Configuration
+
+Set your Stats.fm username in `src/lib/config.js`:
+
+```js
+export const siteConfig = {
+  statsFmUser: 'your-username',
+};
+```
+
+See [Stats.fm integration](/systems/statsfm-integration) for full setup instructions, CSP requirements, and troubleshooting.
+
+## How it works
+
+### Data fetching
+
+On mount, the component:
+
+1. Checks `sessionStorage` for a cached response under the key `statsfm_widget_cache_v1`.
+2. If the cache is valid (exists and is less than 120 seconds old), it hydrates immediately from the cache.
+3. Calls `fetchStats()` unconditionally to refresh data in the background.
+4. Starts a polling interval that calls `fetchStats()` every 20 seconds.
+5. Clears the interval when the component is destroyed.
+
+```js
+// Polling interval
+const pollingInterval = setInterval(fetchStats, 20000);
+return () => clearInterval(pollingInterval);
+```
+
+### API fallback
+
+The widget hits two endpoints in sequence:
+
+<Steps>
+  <Step title="Current stream">
+    `GET https://beta-api.stats.fm/api/v1/users/{username}/streams/current`
+
+    If the user is actively listening, this returns the current track with `isPlaying: true`.
+  </Step>
+  <Step title="Recent stream fallback">
+    If the current stream endpoint returns no data (user is not listening), the widget fetches:
+
+    `GET https://beta-api.stats.fm/api/v1/users/{username}/streams/recent?limit=1`
+
+    This returns the most recently played track. `isPlaying` is set to `false` in this case.
+  </Step>
+  <Step title="Error state">
+    If both requests fail or return no usable data, `error` is set to `true` and the widget renders `// offline...`.
+  </Step>
+</Steps>
+
+### Spotify URL resolution
+
+The Stats.fm track response does not always include direct Spotify URLs. The widget makes additional API calls to resolve them:
+
+- **Album**: `GET https://beta-api.stats.fm/api/v1/albums/{albumId}` — extracts `externalIds.spotify[0]` and builds `https://open.spotify.com/album/{id}`.
+- **Artists**: Each artist's ID is resolved via `GET https://beta-api.stats.fm/api/v1/artists/{artistId}` — extracts `externalIds.spotify[0]` and builds `https://open.spotify.com/artist/{id}`.
+
+Resolved URLs are stored in the `spotifyUrls` reactive state object and written to the `sessionStorage` cache so subsequent renders do not repeat the lookups.
+
+### Accent color extraction
+
+When a new track loads, `updateAccentColor(imageUrl)` fires:
+
+1. Loads the album art image via `new Image()` with `crossOrigin = "Anonymous"`.
+2. Draws a 1×1 pixel canvas over the image to sample its average color.
+3. Converts the sampled RGB to HSL. If lightness is below 0.6, it is boosted to 0.6 to ensure the accent is always bright enough to be readable.
+4. Writes the resulting hex and RGB values to:
+   - `themeState.accentColor` and `themeState.accentRgb` (reactive state)
+   - `document.documentElement` CSS variables `--accent` and `--accent-rgb`
+   - A `accent_color` cookie (`max-age=31536000`, `samesite=lax`) for SSR color injection on the next page load
+
+```js
+document.documentElement.style.setProperty('--accent', hex);
+document.documentElement.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+document.cookie = `accent_color=${encodeURIComponent(hex)}; max-age=31536000; path=/; samesite=lax`;
+```
+
+<Note>
+  The accent color persists across sessions via the cookie. On the next visit the server reads the cookie and injects the CSS variable during SSR, preventing a flash of the default accent color before hydration.
+</Note>
+
+## Render states
+
+<Tabs>
+  <Tab title="Loading">
+    A pulse skeleton with a square placeholder for the album art and two lines for track name and artist.
+
+    ```svelte
+    {#if loading}
+      <div class="animate-pulse flex gap-4 w-full">
+        <div class="w-16 h-16 bg-white/5 rounded-xl shrink-0"></div>
+        <div class="flex flex-col gap-2 w-full justify-center">
+          <div class="h-3 bg-white/5 rounded-full w-3/4"></div>
+          <div class="h-2 bg-white/5 rounded-full w-1/2"></div>
+        </div>
+      </div>
+    {/if}
+    ```
+  </Tab>
+  <Tab title="Error / no data">
+    A muted inline label: `// offline...`
+
+    Shown when `error` is `true` or `data.track` is absent after loading completes.
+  </Tab>
+  <Tab title="Now playing">
+    Album art with ambilight glow effect, track name (linked to Spotify track), artist names (each linked to their Spotify artist page), and a `now playing on` label with the Stats.fm bars icon.
+  </Tab>
+  <Tab title="Last played">
+    Same layout as now playing, but `isPlaying` is `false`. The label reads `Last Played on` in muted gray instead of accent color.
+  </Tab>
+</Tabs>
+
+## Ambilight effect
+
+A blurred, scaled-up copy of the album art (`scale-110`, `filter: url(#ambilight)`) is layered behind the main artwork at `opacity-60`. The `url(#ambilight)` SVG filter reference is expected to be defined elsewhere in the page (typically in the layout). If the filter is absent, the browser ignores it gracefully — the glow simply does not appear.
+
+## Artist link styling
+
+Artist names rendered inside `ScrollingText` use `artist-link` class for hover underline animation:
+
+```css
+@media (hover: hover) {
+  .artist-link::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 1px;
+    bottom: 0;
+    background-color: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: bottom right;
+    transition: transform 300ms;
+  }
+  .artist-link:hover::before {
+    transform: scaleX(1);
+    transform-origin: bottom left;
+  }
+}
+```
+
+The underline slides in from right-to-left on hover and retracts left-to-right on mouse leave — the same pattern used for track links in `ScrollingText`.
+
+## Usage
+
+```svelte
+<script>
+  import StatsFM from '$lib/components/widgets/StatsFM.svelte';
+</script>
+
+<!-- Place inside a sized container; the widget fills its parent -->
+<div class="rounded-3xl border border-[#252525] p-6">
+  <StatsFM />
+</div>
+```
+
+<Warning>
+  The Stats.fm API is a public beta endpoint. There is no authentication required, but the URL may change as the service matures. Monitor the `beta-api.stats.fm` domain for changes if the widget stops fetching data.
+</Warning>

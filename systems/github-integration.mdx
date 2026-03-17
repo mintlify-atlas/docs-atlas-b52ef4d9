@@ -1,0 +1,205 @@
+---
+title: 'GitHub integration'
+description: 'How the projects archive fetches, filters, and caches repository data from the GitHub REST API.'
+keywords: ['github', 'api', 'projects', 'repositories', 'cache', 'server load']
+---
+
+The projects page (`/projects`) fetches repository data directly from the GitHub REST API at request time on the server, with an in-memory cache to avoid hitting rate limits on every page load.
+
+## API endpoint
+
+```
+GET https://api.github.com/users/{username}/repos?sort=updated&per_page=30
+```
+
+The username comes from `siteConfig.github` in `src/lib/config.js`. Sorting by `updated` ensures the most recently pushed repositories appear first. `per_page=30` retrieves enough repos to find 12 non-fork originals after filtering.
+
+<ParamField path="query.sort" type="string" default="updated">
+  Sort order for the returned repositories. Set to `updated` so the most recently active repos appear first.
+</ParamField>
+
+<ParamField path="query.per_page" type="number" default="30">
+  Number of repositories to retrieve per request. 30 gives enough headroom after forks are filtered out.
+</ParamField>
+
+## Filtering and transformation
+
+The raw API response is processed before reaching the page component:
+
+1. **Forks excluded** — `repos.filter(repo => !repo.fork)` drops any forked repository.
+2. **Capped at 12** — `.slice(0, 12)` keeps the 12 most recently updated originals.
+3. **Tags derived from language** — each repo's `language` field becomes a lowercase tag. Repos whose name matches the owner login (personal profile repos) also receive a `markdown` tag.
+
+```js
+const nonForks = repos.filter(repo => !repo.fork).slice(0, 12);
+
+const projects = nonForks.map(repo => {
+  let tags = [];
+  const isPersonal = repo.name.toLowerCase() === repo.owner.login.toLowerCase();
+
+  if (repo.language) {
+    tags.push(repo.language.toLowerCase());
+  } else if (isPersonal) {
+    languageCounts['Markdown'] = (languageCounts['Markdown'] || 0) + 1;
+  }
+
+  if (isPersonal && !tags.includes('markdown')) {
+    tags.push('markdown');
+  }
+
+  return {
+    title: repo.name.toLowerCase(),
+    description: repo.description ? repo.description.toLowerCase() : 'no description provided.',
+    link: repo.html_url,
+    pushedAt: repo.pushed_at,
+    tags,
+  };
+});
+```
+
+## Data shapes
+
+### `Project`
+
+<ResponseField name="title" type="string" required>
+  Repository name, lowercased.
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Repository description, lowercased. Falls back to `'no description provided.'` when the GitHub description is empty.
+</ResponseField>
+
+<ResponseField name="link" type="string" required>
+  Full URL to the repository on GitHub (`html_url`).
+</ResponseField>
+
+<ResponseField name="pushedAt" type="string" required>
+  ISO 8601 timestamp of the last push (`pushed_at`).
+</ResponseField>
+
+<ResponseField name="tags" type="string[]" required>
+  Lowercase tags derived from the repository's primary language. Personal repos also include `'markdown'`.
+</ResponseField>
+
+### `Stats`
+
+<ResponseField name="totalRepos" type="number" required>
+  Count of non-fork repositories returned (up to 12).
+</ResponseField>
+
+<ResponseField name="totalStars" type="number" required>
+  Sum of `stargazers_count` across all included repositories.
+</ResponseField>
+
+<ResponseField name="topLanguages" type="object[]" required>
+  Array of language breakdown objects, sorted by frequency descending.
+
+  <Expandable title="TopLanguage properties">
+    <ResponseField name="name" type="string">
+      Language name, lowercased.
+    </ResponseField>
+    <ResponseField name="percent" type="number">
+      Exact percentage (float) of repos using this language.
+    </ResponseField>
+    <ResponseField name="displayPercent" type="number">
+      Rounded integer percentage for display.
+    </ResponseField>
+    <ResponseField name="count" type="number">
+      Number of repos using this language.
+    </ResponseField>
+    <ResponseField name="color" type="string">
+      Hex colour associated with this language, or `'#8b8b8b'` if unknown.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Language breakdown
+
+Language usage percentages are computed from the `languageCounts` map built during the mapping step. Several non-meaningful languages are excluded before the percentage calculation:
+
+```js
+const omittedLanguages = ['Makefile', 'Dockerfile', 'AutoHotkey', 'Batchfile'];
+omittedLanguages.forEach(lang => { delete languageCounts[lang]; });
+
+const totalLanguages = Object.values(languageCounts).reduce((a, b) => a + b, 0) || 1;
+
+const topLanguages = Object.entries(languageCounts)
+  .sort((a, b) => b[1] - a[1])
+  .map(([lang, count]) => ({
+    name: lang.toLowerCase(),
+    percent: (count / totalLanguages) * 100,
+    displayPercent: Math.round((count / totalLanguages) * 100),
+    count,
+    color: langColors[lang] || '#8b8b8b',
+  }));
+```
+
+## In-memory caching
+
+To avoid a GitHub API call on every page request, the load function uses a module-level cache object:
+
+```js
+let cache = {
+  data: null,
+  timestamp: 0,
+};
+
+const CACHE_DURATION = 1 * 24 * 60 * 60 * 1000; // 1 day in ms
+```
+
+On each request, the function checks whether the cached data is still fresh:
+
+```js
+const now = Date.now();
+if (cache.data && (now - cache.timestamp) < CACHE_DURATION) {
+  setHeaders({ 'Cache-Control': 'public, max-age=86400' });
+  return cache.data;
+}
+```
+
+If the cache is stale or empty, a fresh request is made and the result is stored back in `cache`.
+
+<Warning>
+  The cache is stored in module memory. It resets every time the server process restarts. On serverless deployments where each invocation is a fresh process, the cache provides no benefit between cold starts.
+</Warning>
+
+## HTTP caching header
+
+Regardless of whether the response came from the in-memory cache or a live API call, the server sets:
+
+```
+Cache-Control: public, max-age=86400
+```
+
+This allows CDN and browser caches to serve the page for up to 24 hours without re-requesting it from the origin.
+
+## Error handling
+
+The load function wraps the entire fetch in a `try/catch`. If the GitHub API returns a non-OK status or the response body is not an array, the function returns gracefully:
+
+```js
+if (!res.ok) {
+  console.error('GitHub API error:', res.statusText);
+  return cache.data || { projects: [], stats: null };
+}
+
+if (!Array.isArray(repos)) {
+  return { projects: [], stats: null };
+}
+```
+
+Stale cache data is preferred over an empty state, so a temporary API outage will still show the last known project list.
+
+## Changing the GitHub username
+
+The username is read from `siteConfig.github` in `src/lib/config.js`. Update that value to point the projects archive at a different GitHub account:
+
+```js
+// src/lib/config.js
+export const siteConfig = {
+  github: 'allocazione', // ← change this
+  // ...
+};
+```
+
+No changes to the load function itself are needed.

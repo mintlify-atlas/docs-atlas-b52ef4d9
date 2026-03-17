@@ -1,0 +1,146 @@
+---
+title: 'Site config'
+description: 'The siteConfig object is the single source of truth for all personal and social data in allocazione.dev.'
+keywords: ['config', 'siteConfig', 'socials', 'avatar', 'metadata', 'descriptions']
+---
+
+All personal data — name, profession, social links, avatar, and contact details — lives in one place: `src/lib/config.js`. Updating that file propagates changes across every page that imports it.
+
+## Overview
+
+```js src/lib/config.js
+export const siteConfig = {
+    name: "Sel",
+    profession: "Cybersecurity Intern, Malware Researcher and Linux Tinkerer",
+    skills: "optimizations and forensic security",
+    avatar: "https://github.com/allocazione.png",
+    email: "me@allocazione.dev",
+    github: "allocazione",
+    statsFmUser: "iriel",
+    socials: [
+        { name: "GitHub", url: "https://github.com/allocazione" },
+        { name: "Discord", url: "https://discord.com/users/659022591071223819" },
+        { name: "Telegram", url: "https://t.me/seleneftw" },
+        { name: "Steam", url: "https://steamcommunity.com/id/seloris" }
+    ],
+    descriptions: [
+        "// is that the tempo i'm meant to follow?",
+        "// if i live to be a weathervane, always pointing off, to lead you along the flyway",
+        // …
+    ],
+    lastUpdated: "2026-03-10"
+};
+```
+
+## Fields
+
+<ParamField path="body.name" type="string" required>
+  Your display name. Used in page `<title>` tags and greeting text rendered by the home page component.
+</ParamField>
+
+<ParamField path="body.profession" type="string" required>
+  Professional title shown in the bio section on the home page. Can be a comma-separated list of roles.
+</ParamField>
+
+<ParamField path="body.skills" type="string" required>
+  Short skills phrase. Appears in the bio blurb alongside `profession`.
+</ParamField>
+
+<ParamField path="body.avatar" type="string" required>
+  Absolute URL to your avatar image. The GitHub avatar endpoint (`https://github.com/{username}.png`) is recommended because it stays current automatically.
+
+  The CSP `img-src` directive permits `https://github.com` and `https://*.githubusercontent.com` by default, so the GitHub URL works without changes.
+</ParamField>
+
+<ParamField path="body.email" type="string" required>
+  Contact email address. Rendered as a `mailto:` link on the contact page.
+</ParamField>
+
+<ParamField path="body.github" type="string" required>
+  GitHub username — no `@` prefix, no URL. This value is interpolated directly into the GitHub REST API endpoint used by the projects page:
+
+  ```
+  GET https://api.github.com/users/{github}/repos
+  ```
+
+  See [GitHub integration](/systems/github-integration) for details.
+</ParamField>
+
+<ParamField path="body.statsFmUser" type="string" required>
+  Stats.fm username used to fetch your listening history for the music widget. Must match the username shown in your Stats.fm profile URL (`https://stats.fm/{username}`).
+
+  See [Stats.fm integration](/systems/statsfm-integration) for details.
+</ParamField>
+
+<ParamField path="body.socials" type="object[]" required>
+  Array of social link objects rendered in the navigation and footer. Each entry requires two fields:
+
+  ```js
+  { name: string, url: string }
+  ```
+
+  <Expandable title="Social link fields">
+    <ResponseField name="name" type="string" required>
+      Display label for the link (e.g. `"GitHub"`, `"Telegram"`).
+    </ResponseField>
+    <ResponseField name="url" type="string" required>
+      Full URL including protocol (e.g. `"https://github.com/allocazione"`).
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="body.descriptions" type="string[]" required>
+  Array of strings used as rotating meta descriptions and as secondary text on the about section. One entry is selected at random on each page render. Strings in the default config are lyrics/quotes prefixed with `//` — the format is arbitrary.
+</ParamField>
+
+<ParamField path="body.lastUpdated" type="string" required>
+  ISO 8601 date string in `YYYY-MM-DD` format. Displayed as a "last updated" badge on the home page. Update this manually whenever you make meaningful content changes.
+
+  ```js
+  lastUpdated: "2026-03-10"
+  ```
+</ParamField>
+
+## Adding a social link
+
+Append an entry to the `socials` array:
+
+```js src/lib/config.js
+socials: [
+    { name: "GitHub",   url: "https://github.com/allocazione" },
+    { name: "Discord",  url: "https://discord.com/users/659022591071223819" },
+    { name: "Telegram", url: "https://t.me/seleneftw" },
+    { name: "Steam",    url: "https://steamcommunity.com/id/seloris" },
+    // Add new entries below
+    { name: "LinkedIn", url: "https://linkedin.com/in/yourprofile" },
+],
+```
+
+The `name` value becomes the link label; `url` is the `href`. No other files need to change — components that iterate `siteConfig.socials` will pick up the new entry automatically.
+
+## Using siteConfig in components
+
+Import the named export wherever you need site data:
+
+```js
+import { siteConfig } from '$lib/config.js';
+```
+
+The `$lib` alias resolves to `src/lib/` and is available in all SvelteKit route files and components.
+
+```svelte src/routes/+page.svelte
+<script>
+  import { siteConfig } from '$lib/config.js';
+</script>
+
+<h1>Hi, I'm {siteConfig.name}</h1>
+<p>{siteConfig.profession}</p>
+
+{#each siteConfig.socials as social}
+  <a href={social.url}>{social.name}</a>
+{/each}
+```
+
+<Note>
+  `siteConfig` is a plain object — not a Svelte store or reactive state. Changes to it at runtime are not reactive. It is intended as a static configuration source read at component initialisation.
+</Note>

@@ -1,0 +1,122 @@
+---
+title: 'Nav'
+description: 'A fixed top navigation bar with animated hover highlight, active route tracking, and a language-switcher dropdown.'
+keywords: ['nav', 'navigation', 'header', 'i18n', 'language', 'locale', 'routing', 'component']
+---
+
+The `Nav` component renders the site-wide navigation bar. It is fixed to the top of the viewport, uses a frosted-glass pill style, and features a sliding background highlight that follows hover and active-route state. A globe icon opens a language-switcher dropdown with the same pill aesthetic.
+
+## Source
+
+`src/lib/components/ui/Nav.svelte`
+
+## Dependencies
+
+| Import | Purpose |
+|---|---|
+| `$app/state` — `page` | Reads the current URL pathname to determine the active link |
+| `$app/environment` — `browser` | Guards DOM operations so they only run in the browser |
+| `svelte-i18n` — `t`, `locale`, `locales` | Provides translated link labels and the writable locale store |
+| `svelte/transition` — `fly`, `fade` | Animates the language dropdown in and out |
+| `svelte` — `tick`, `onMount` | `tick` ensures the dropdown is in the DOM before its highlight is positioned; `onMount` initialises mobile detection and resize listeners |
+| `$lib/locales/i18n.js` | Side-effect import that bootstraps the `svelte-i18n` configuration |
+
+## Props
+
+The `Nav` component accepts **no props**. All configuration (links, locales) is internal.
+
+## How it works
+
+### Link generation
+
+The four navigation links are derived reactively from the `$t()` translation function:
+
+```svelte
+const links = $derived([
+  { label: $t('nav.home'),     href: '/' },
+  { label: $t('nav.projects'), href: '/projects/' },
+  { label: $t('nav.uses'),     href: '/uses/' },
+  { label: $t('nav.contact'),  href: '/contact/' },
+]);
+```
+
+When the locale changes, `links` is automatically recomputed and the nav re-renders with the new translations.
+
+### Sliding highlight
+
+A `div` with `position: absolute` is positioned behind the currently hovered or active link by reading DOM bounding rectangles and applying inline `transform: translateX()` and `width` styles. The transition (`sm:transition-all sm:duration-300 sm:ease-out`) is disabled on mobile to avoid jarring behaviour on touch.
+
+```js
+function updateHighlight(element) {
+  const navRect = navElement.getBoundingClientRect();
+  const linkRect = element.getBoundingClientRect();
+  const left = linkRect.left - navRect.left;
+  const width = linkRect.width;
+
+  highlightStyle = `transform: translateX(${left}px); width: ${width}px; opacity: 1;`;
+}
+```
+
+When the mouse leaves the nav entirely, the highlight snaps back to the active route (or fades out if no link matches the current path).
+
+### Active route matching
+
+The current path is read from `page.url.pathname`. Active state is applied with a compound condition that handles both exact matches and trailing-slash variants:
+
+```svelte
+activePath === link.href ||
+(activePath === link.href + '/' && link.href !== '/') ||
+(link.href === activePath + '/' && activePath !== '/') ||
+(activePath.startsWith(link.href) && link.href !== '/')
+```
+
+### Language switcher
+
+Clicking the globe icon toggles `isLangOpen`. While open:
+
+- The nav highlight moves to sit under the globe button.
+- The dropdown appears with a `fly` transition (disabled on mobile).
+- A separate sliding highlight inside the dropdown tracks the current locale and hover state.
+- Clicking outside the nav element closes the dropdown via a `click` listener on `window`.
+
+The four available locales are `en`, `it`, `de`, and `es`. Selecting one writes to the `$locale` store and closes the dropdown.
+
+<Note>
+  Flag images are inline SVG data URIs embedded directly in the component. No external image requests are made.
+</Note>
+
+## Usage
+
+Include `Nav` once in your root layout. It has no required configuration:
+
+```svelte
+<!-- src/routes/+layout.svelte -->
+<script>
+  import Nav from '$lib/components/ui/Nav.svelte';
+</script>
+
+<Nav />
+
+<slot />
+```
+
+<Warning>
+  `Nav` relies on `$app/state` and `$app/environment`, which are SvelteKit-specific. It cannot be rendered outside a SvelteKit project without adapting those imports.
+</Warning>
+
+## Accessibility
+
+- The `<nav>` element carries `aria-label="Main Navigation"`.
+- Each link has an `aria-label` of `"Go to {label} page"`.
+- The globe button has `aria-label="Change language"` and `aria-expanded` reflects dropdown state.
+- Language buttons have `aria-label` set to the human-readable locale name (e.g. `"Italiano"`).
+- The dropdown has `role="menu"` and each option carries `role="menuitem"`.
+
+## Mobile behaviour
+
+`isMobile` is set to `true` when `window.innerWidth < 640`, matching Tailwind's `sm` breakpoint. On mobile:
+
+- Hover highlights are suppressed — only clicks move the indicator.
+- The language dropdown appears without a transition animation (`duration: 0`).
+- Link preloading is disabled (`data-sveltekit-preload-data="off"`) to conserve bandwidth.
+- Resize and `orientationchange` listeners keep `isMobile` accurate when the device rotates.

@@ -1,0 +1,249 @@
+---
+title: 'Deployment'
+description: 'How to build and deploy allocazione.dev to GitHub Pages or Cloudflare Pages using the static adapter.'
+keywords: ['deployment', 'github pages', 'cloudflare pages', 'static adapter', 'build', 'vite']
+---
+
+allocazione.dev uses `@sveltejs/adapter-static` to produce a fully pre-rendered static site. The build output is a plain `build/` directory that can be served from any static hosting provider.
+
+## How the static build works
+
+`svelte.config.js` configures the static adapter:
+
+```js svelte.config.js
+import adapter from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+export default {
+    preprocess: vitePreprocess(),
+    kit: {
+        adapter: adapter()
+    }
+};
+```
+
+Running `npm run build` invokes Vite and the SvelteKit adapter, which pre-renders every route and writes the output to `build/`.
+
+```
+build/
+├── index.html
+├── _app/          # Hashed JS/CSS assets
+├── favicon.svg
+└── ...            # One directory per pre-rendered route
+```
+
+<Warning>
+  CSP headers defined in `src/hooks.server.js` only run in SSR/Node server mode. For pure static deployments the `hooks.server.js` response headers are **not applied**. You must configure equivalent headers at the hosting level — see the [CSP headers](#csp-headers) section below.
+</Warning>
+
+## Local production preview
+
+Before deploying, verify the production build locally:
+
+```bash
+npm run build
+npm run preview
+```
+
+`vite preview` serves the `build/` directory on `http://localhost:4173`. This is the closest approximation to the live environment without an actual deploy.
+
+## Deploying
+
+<Tabs>
+  <Tab title="GitHub Pages">
+    GitHub Pages can serve the `build/` directory directly from a branch or via a GitHub Actions workflow.
+
+    **Manual deploy (using `gh-pages` CLI)**
+
+    <Steps>
+      <Step title="Install the gh-pages package">
+        ```bash
+        npm install --save-dev gh-pages
+        ```
+      </Step>
+      <Step title="Build the site">
+        ```bash
+        npm run build
+        ```
+      </Step>
+      <Step title="Publish the build directory">
+        ```bash
+        npx gh-pages -d build
+        ```
+
+        This pushes the `build/` directory to the `gh-pages` branch of your repository.
+      </Step>
+      <Step title="Enable GitHub Pages in repository settings">
+        Go to **Settings → Pages**, set the source to the `gh-pages` branch, and save.
+      </Step>
+    </Steps>
+
+    **Automated deploy via GitHub Actions**
+
+    <Steps>
+      <Step title="Create the workflow file">
+        Add `.github/workflows/deploy.yml` to your repository:
+
+        ```yaml .github/workflows/deploy.yml
+        name: Deploy to GitHub Pages
+
+        on:
+          push:
+            branches: [main]
+
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            permissions:
+              contents: write
+            steps:
+              - uses: actions/checkout@v4
+
+              - uses: actions/setup-node@v4
+                with:
+                  node-version: 20
+                  cache: npm
+
+              - run: npm ci
+              - run: npm run build
+
+              - name: Deploy
+                uses: peaceiris/actions-gh-pages@v4
+                with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir: ./build
+        ```
+      </Step>
+      <Step title="Push to main">
+        Every push to `main` triggers a build and deploy to the `gh-pages` branch automatically.
+      </Step>
+      <Step title="Enable GitHub Pages in repository settings">
+        Go to **Settings → Pages**, set the source to the `gh-pages` branch, and save.
+      </Step>
+    </Steps>
+
+    <Note>
+      GitHub Pages does not support custom response headers natively. Use a `_headers` file workaround or a Cloudflare proxy in front of GitHub Pages to enforce CSP headers.
+    </Note>
+  </Tab>
+
+  <Tab title="Cloudflare Pages">
+    Cloudflare Pages detects SvelteKit projects automatically and can build them directly from your Git repository.
+
+    <Steps>
+      <Step title="Connect your repository">
+        Log in to the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create application → Pages**, and connect your GitHub or GitLab repository.
+      </Step>
+      <Step title="Configure the build settings">
+        Set the following values in the build configuration:
+
+        | Setting | Value |
+        |---|---|
+        | Build command | `npm run build` |
+        | Build output directory | `build` |
+        | Node.js version | `20` (set via environment variable `NODE_VERSION=20`) |
+      </Step>
+      <Step title="Deploy">
+        Save and deploy. Cloudflare Pages clones your repo, runs `npm run build`, and serves the `build/` directory from its global CDN.
+      </Step>
+      <Step title="Configure a custom domain (optional)">
+        See [Custom domain](#custom-domain) below.
+      </Step>
+    </Steps>
+
+    <Tip>
+      Cloudflare Pages supports custom response headers via a `_headers` file in the `build/` output directory, or via **Transform Rules** in the Cloudflare dashboard. Use either method to add the CSP and other security headers that `hooks.server.js` would apply in SSR mode.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## CSP headers
+
+The Content Security Policy is defined in `src/hooks.server.js`:
+
+```js src/hooks.server.js
+"Content-Security-Policy",
+[
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https://github.com https://*.githubusercontent.com "
+        + "https://cdn.stats.fm https://*.stats.fm https://i.scdn.co "
+        + "https://mosaic.scdn.com https://is1-ssl.mzstatic.com "
+        + "https://www.transparenttextures.com",
+    "connect-src 'self' https://beta-api.stats.fm https://api.github.com",
+    "frame-ancestors 'none'"
+].join('; ')
+```
+
+This hook runs server-side. In a static deployment there is no running SvelteKit server, so this code is never executed and the headers are never sent.
+
+To enforce equivalent CSP on a static host:
+
+<Tabs>
+  <Tab title="Cloudflare Pages">
+    Create a `static/_headers` file in your project. SvelteKit copies the contents of `static/` into `build/` during the build.
+
+    ```text static/_headers
+    /*
+      Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://github.com https://*.githubusercontent.com https://cdn.stats.fm https://*.stats.fm https://i.scdn.co https://mosaic.scdn.com https://is1-ssl.mzstatic.com https://www.transparenttextures.com; connect-src 'self' https://beta-api.stats.fm https://api.github.com; frame-ancestors 'none'
+      X-Frame-Options: DENY
+      X-Content-Type-Options: nosniff
+    ```
+
+    Alternatively, configure **Transform Rules** in the Cloudflare dashboard under **Rules → Transform Rules → Modify Response Header**.
+  </Tab>
+  <Tab title="GitHub Pages">
+    GitHub Pages does not support custom response headers. Options:
+
+    - Proxy the site through Cloudflare (free plan) and set headers via Cloudflare Transform Rules.
+    - Accept the missing CSP headers as a limitation of the platform.
+  </Tab>
+</Tabs>
+
+## Custom domain
+
+<Tabs>
+  <Tab title="Cloudflare Pages">
+    <Steps>
+      <Step title="Add a custom domain in the Pages dashboard">
+        Open your Pages project, go to **Custom domains**, and click **Set up a custom domain**. Enter your domain (e.g. `allocazione.dev`).
+      </Step>
+      <Step title="Update your DNS">
+        Cloudflare will prompt you to add a CNAME record pointing your domain to `<project>.pages.dev`. If your domain is already on Cloudflare, this is done automatically.
+      </Step>
+      <Step title="Wait for propagation">
+        DNS propagation typically takes a few minutes when the domain is managed by Cloudflare. HTTPS is provisioned automatically.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="GitHub Pages">
+    <Steps>
+      <Step title="Add a CNAME file">
+        Create `static/CNAME` in your project containing just your domain:
+
+        ```text static/CNAME
+        allocazione.dev
+        ```
+
+        This file is copied into `build/` by the adapter and preserved on the `gh-pages` branch.
+      </Step>
+      <Step title="Configure DNS">
+        At your DNS provider, add an `A` record pointing your apex domain to GitHub's IPs, or a `CNAME` for a subdomain pointing to `<username>.github.io`.
+      </Step>
+      <Step title="Set the custom domain in repository settings">
+        Go to **Settings → Pages → Custom domain**, enter your domain, and save. GitHub will verify DNS and issue a TLS certificate.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Runtime behaviour on static hosts
+
+Even though the site is statically deployed, several features continue to work without a server:
+
+- **`accent_color` and `locale` cookies** — read and written by client-side JavaScript. They persist across sessions on any static host.
+- **GitHub API requests** — made directly from the browser to `https://api.github.com` via `fetch`. No server proxy is required.
+- **Stats.fm requests** — also client-side fetches to `https://beta-api.stats.fm`.
+- **`CACHE_DURATION`** — the in-memory cache in `src/routes/projects/+page.server.js` is only active during SSR or when running in a serverless edge function. On a purely static export the projects data is fetched fresh on every client-side navigation.

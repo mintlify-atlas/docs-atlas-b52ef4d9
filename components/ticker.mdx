@@ -1,0 +1,116 @@
+---
+title: 'Ticker'
+description: 'An animated digit-slot component that smoothly scrolls each character to its numeric value, used to display live clock digits.'
+keywords: ['ticker', 'clock', 'animation', 'digits', 'slot', 'component']
+---
+
+`Ticker` renders a string of characters as a row of animated slots. Numeric characters scroll vertically to their value using a CSS `translateY` transition. Colons (`:`) are rendered as static separators. The effect is a mechanical flip-clock aesthetic with CSS-only animation.
+
+## Source
+
+`src/lib/components/ui/Ticker.svelte`
+
+```svelte src/lib/components/ui/Ticker.svelte
+<script>
+  let { value = '0' } = $props();
+
+  const digitsArray = $derived(value.split(''));
+</script>
+
+<div class="relative flex flex-row transition-all duration-300">
+  {#each digitsArray as char, i (i)}
+    {#if char === ':'}
+      <span class="text-3xl sm:text-4xl font-light opacity-50 px-0.5">:</span>
+    {:else}
+      <div class="relative overflow-hidden h-10 sm:h-12 w-5 sm:w-6"
+           style="transform: translateZ(0); backface-visibility: hidden;">
+        <div class="absolute w-full flex flex-col transition-transform duration-300 ease-in-out"
+             style="transform: translateY(-{parseInt(char) * 10}%);">
+          {#each [0,1,2,3,4,5,6,7,8,9] as num}
+            <div class="flex justify-center items-center h-10 sm:h-12">
+              <span class="text-3xl sm:text-4xl font-light"
+                    style="backface-visibility: hidden;">{num}</span>
+            </div>
+          {/each}
+        </div>
+        <span class="invisible text-3xl sm:text-4xl font-light">0</span>
+      </div>
+    {/if}
+  {/each}
+</div>
+```
+
+## Props
+
+<ParamField path="value" type="string" default="'0'">
+  The string to display. Each character is rendered individually. Numeric characters (`0`–`9`) animate to their value. Colon characters (`:`) are rendered as dim static separators. Other characters are rendered as their digit position divided by 10, which may produce unexpected results — pass only digits and colons.
+</ParamField>
+
+## How the animation works
+
+Each digit slot contains a vertical stack of all ten numerals (0–9), each the same height as the slot. The stack is shifted upward by `translateY(-N * 10%)` where `N` is the digit's numeric value. A CSS transition on `transition-transform duration-300 ease-in-out` animates the shift whenever `value` changes.
+
+```
+Slot height: 40px (h-10) / 48px (h-12 on sm+)
+Stack height: 10 × slot height = 400px / 480px
+translateY for digit 3: -30%
+translateY for digit 7: -70%
+```
+
+An invisible `0` is placed after the stack to reserve the correct width so the slot does not collapse.
+
+`transform: translateZ(0)` and `backface-visibility: hidden` are applied to promote each slot to its own GPU compositing layer, eliminating sub-pixel rendering artefacts during animation.
+
+## Usage
+
+### With the Clock widget
+
+`Ticker` is used directly by the `Clock` widget:
+
+```svelte
+<script>
+  import Ticker from '$lib/components/ui/Ticker.svelte';
+
+  let time = $state('00:00:00');
+
+  $effect(() => {
+    const update = () => {
+      time = new Date().toLocaleTimeString('en-GB', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      });
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  });
+</script>
+
+<Ticker value={time} />
+```
+
+### Standalone
+
+```svelte
+<script>
+  import Ticker from '$lib/components/ui/Ticker.svelte';
+</script>
+
+<!-- Static display -->
+<Ticker value="12:34:56" />
+
+<!-- Single digit -->
+<Ticker value="7" />
+```
+
+<Note>
+  Only digits `0`–`9` and the colon `:` are supported. Passing letters or symbols will not throw, but the animation offset will be calculated as `NaN` and `translateY(NaN%)` which browsers treat as `translateY(0%)` — the digit will always appear as `0`.
+</Note>
+
+## Dimensions
+
+| Breakpoint | Slot height | Slot width | Font size |
+|---|---|---|---|
+| Default (mobile) | `h-10` (40px) | `w-5` (20px) | `text-3xl` |
+| `sm` (640px+) | `h-12` (48px) | `w-6` (24px) | `text-4xl` |
+
+Font weight is `font-light` throughout. The colon separator uses `opacity-50` to visually recede relative to the digits.

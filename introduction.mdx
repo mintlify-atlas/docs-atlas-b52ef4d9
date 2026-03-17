@@ -1,0 +1,56 @@
+---
+title: "Introduction"
+description: "Documentation for allocazione.dev — a personal portfolio and developer hub built with Svelte 5 and SvelteKit."
+---
+
+## What is allocazione.dev?
+
+[allocazione.dev](https://allocazione.dev) is a high-performance personal portfolio website built by Sel ([@seleneftw](https://github.com/allocazione)). It is a statically generated site powered by **Svelte 5** and **SvelteKit 2**, with a focus on performance, modularity, and expressive design.
+
+The site serves as a developer hub featuring:
+
+- A **home page** with a bento-grid layout, live music activity, and a real-time clock
+- A **projects archive** that fetches repositories directly from the GitHub API
+- A **contact page** with social presence and availability information
+- A **/uses page** documenting the full hardware and software setup
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the site running locally in under 5 minutes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/project-structure">
+    Understand how the project is structured
+  </Card>
+  <Card title="Components" icon="puzzle-piece" href="/components/button">
+    Browse all UI components and widgets
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/site-config">
+    Customize the site config and deployment
+  </Card>
+</CardGroup>
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js |
+| Framework | Svelte 5 (Runes) |
+| Meta-framework | SvelteKit 2 (SSG) |
+| Styling | Tailwind CSS 4 |
+| Localization | svelte-i18n |
+| Animations | anime.js |
+| Distribution | GitHub Pages / Cloudflare Pages |
+
+## Key Features
+
+- **Svelte 5 Runes** — Uses the latest `$state`, `$derived`, and `$props` reactivity primitives throughout
+- **Static Site Generation** — All pages are prerendered at build time using `@sveltejs/adapter-static`
+- **Dynamic accent theming** — Users can pick an accent color that persists via a cookie; the server injects CSS variables during SSR to prevent flash of unstyled content
+- **Multilingual** — Full translations in English, Italian, German, and Spanish via `svelte-i18n`
+- **GitHub API integration** — The projects archive fetches live repository data with an in-memory cache
+- **Stats.fm integration** — Real-time music activity is surfaced from the Stats.fm API
+- **Security headers** — Every response includes a strict Content Security Policy and other hardened HTTP headers
+
+## Repository
+
+The source code is available at [allocazione/allocazione.dev](https://github.com/allocazione/allocazione.dev).

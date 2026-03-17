@@ -1,0 +1,130 @@
+---
+title: 'ProjectCard'
+description: 'A linked card that displays a project title, description, technology tags, and an optional last-updated date with hover lift and accent glow effects.'
+keywords: ['project', 'card', 'widget', 'portfolio', 'tags', 'component']
+---
+
+`ProjectCard` renders a single project entry as a full-height anchor element. On hover it lifts with a `translateY(-4px)` transform, the border picks up the site's accent color, and a radial gradient glow appears. An arrow icon fades into the top-right corner to signal that the card is clickable.
+
+## Source
+
+`src/lib/components/widgets/ProjectCard.svelte`
+
+```svelte src/lib/components/widgets/ProjectCard.svelte
+<script>
+  let { title, description, link, tags = [], external = false, updatedAt = null } = $props();
+
+  function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).toLowerCase();
+  }
+</script>
+```
+
+## Props
+
+<ParamField path="title" type="string" required>
+  The project name. Rendered in Space Mono, lowercase, with wide tracking.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  A short description of the project. Displayed as small, relaxed-leading text below the title. Also rendered lowercase.
+</ParamField>
+
+<ParamField path="link" type="string" required>
+  The URL the card links to. Pass a root-relative path for internal pages or a full URL for external ones.
+</ParamField>
+
+<ParamField path="tags" type="string[]" default="[]">
+  An array of technology or category labels rendered as small pill badges below the description. Tags are only rendered when the array is non-empty.
+</ParamField>
+
+<ParamField path="external" type="boolean" default="false">
+  When `true`, sets `target="_blank"` and `rel="noopener noreferrer"` on the card anchor. Use this for links to GitHub repositories, live demos, or other external URLs.
+</ParamField>
+
+<ParamField path="updatedAt" type="string | null" default="null">
+  An ISO 8601 date string (e.g. `"2024-11-03T18:00:00Z"`) representing the project's last update. Formatted with `toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })` and rendered in lowercase below the description. If `null`, the date row is omitted entirely.
+</ParamField>
+
+## Usage
+
+```svelte
+<script>
+  import ProjectCard from '$lib/components/widgets/ProjectCard.svelte';
+</script>
+
+<!-- External GitHub project -->
+<ProjectCard
+  title="allocazione.dev"
+  description="personal portfolio and developer hub"
+  link="https://github.com/allocazione/allocazione.dev"
+  tags={['svelte', 'sveltekit', 'tailwind']}
+  external={true}
+  updatedAt="2024-11-03T18:00:00Z"
+/>
+
+<!-- Internal page link -->
+<ProjectCard
+  title="uses"
+  description="hardware and software setup"
+  link="/uses/"
+  tags={['hardware', 'software']}
+/>
+```
+
+### Rendering a grid of cards
+
+Cards are designed to fill their grid cell height (`h-full`). Wrap them in a CSS grid for best results:
+
+```svelte
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  {#each projects as project}
+    <ProjectCard
+      title={project.name}
+      description={project.description}
+      link={project.html_url}
+      tags={project.topics}
+      external={true}
+      updatedAt={project.pushed_at}
+    />
+  {/each}
+</div>
+```
+
+## Visual behaviour
+
+| Element | Default | On hover |
+|---|---|---|
+| Card border | `border-[#252525]` | `rgba(var(--accent-rgb), 0.3)` |
+| Card background | transparent | `rgba(255,255,255,0.02)` |
+| Card position | static | `translateY(-4px)` |
+| Arrow icon | `opacity-0` | `opacity-100` |
+| Accent glow overlay | `opacity-0` | `opacity-100` |
+| Date label | `opacity-40` | `opacity-60` |
+| Tag borders | `border-white/5` | `border-white/10`, text `gray-400` |
+
+<Note>
+  All hover effects are wrapped in `@media (hover: hover)`. On touch devices where there is no hover capability, cards remain in their default visual state — there is no `:active` style applied.
+</Note>
+
+## Card layout
+
+The card uses a `flex flex-col h-full` inner layout:
+
+1. Arrow icon (absolute, top-right)
+2. Title (`h3`, Space Mono)
+3. Description (`p`, `grow` — expands to push tags to the bottom)
+4. Last updated date (conditional)
+5. Tags (`mt-auto` — pinned to the bottom)
+
+This means the description always grows to fill available vertical space, keeping tags and dates visually anchored at the bottom regardless of content length.
+
+## Accent glow
+
+The glow is a `bg-linear-to-tr from-accent/0 via-accent/1.5 to-accent/3` overlay. It is nearly transparent at all opacity levels — the effect is more felt than seen, adding warmth to the hover state without being garish.

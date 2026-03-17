@@ -1,0 +1,83 @@
+---
+title: 'Button'
+description: 'A styled anchor element used for primary calls to action. Renders as a link with a glass-morphism border, subtle hover glow, and lowercase tracking.'
+keywords: ['button', 'link', 'cta', 'ui', 'anchor', 'component']
+---
+
+The `Button` component is a styled `<a>` tag intended for navigation and call-to-action links. It wraps any content via a Svelte 5 snippet and handles both internal and external link behaviour.
+
+## Source
+
+`src/lib/components/ui/Button.svelte`
+
+```svelte src/lib/components/ui/Button.svelte
+<script>
+  let { href = '#', external = false, children } = $props();
+</script>
+
+<a
+  href={href}
+  target={external ? '_blank' : null}
+  rel={external ? 'noopener noreferrer' : null}
+  class="inline-flex items-center justify-center px-6 py-3 border border-white/10
+         text-xs sm:text-sm text-gray-300 hover:text-white rounded bg-white/1
+         hover:bg-white/5 hover:border-white/20 transition-all duration-300
+         tracking-widest lowercase shadow-[0_0_15px_rgba(255,255,255,0)]
+         hover:shadow-[0_0_15px_rgba(255,255,255,0.03)] group"
+>
+  {@render children()}
+</a>
+```
+
+## Props
+
+<ParamField path="href" type="string" default="'#'">
+  The URL the button links to. Use a root-relative path for internal links (e.g. `"/projects/"`) or a full URL for external ones.
+</ParamField>
+
+<ParamField path="external" type="boolean" default="false">
+  When `true`, adds `target="_blank"` and `rel="noopener noreferrer"` to open the link in a new tab safely.
+</ParamField>
+
+<ParamField path="children" type="Snippet" required>
+  Slot content rendered inside the button. Passed via `{@render children()}`. Required — passing no children will throw at runtime.
+</ParamField>
+
+## Usage
+
+```svelte
+<script>
+  import Button from '$lib/components/ui/Button.svelte';
+</script>
+
+<!-- Internal navigation -->
+<Button href="/projects/">
+  view projects
+</Button>
+
+<!-- External link -->
+<Button href="https://github.com/allocazione" external>
+  github
+</Button>
+```
+
+<Tip>
+  Button text is styled `lowercase` at the CSS level via Tailwind. You don't need to write labels in lowercase in your markup, but it is the convention used site-wide for consistency.
+</Tip>
+
+## Visual behaviour
+
+| State | Effect |
+|---|---|
+| Default | `border-white/10`, `text-gray-300`, transparent background |
+| Hover | `border-white/20`, `text-white`, faint white background and outer glow |
+| Focus | Inherits browser default focus ring (no custom override in this component) |
+
+The `group` class is applied so that parent components can conditionally style child elements using Tailwind's `group-hover:` variant.
+
+## Design notes
+
+- Padding is `px-6 py-3`, giving a comfortable click target on mobile and desktop.
+- Font size scales from `text-xs` (mobile) to `text-sm` (sm breakpoint and above).
+- The box shadow transitions from `rgba(255,255,255,0)` to a very faint white glow on hover — intentionally subtle.
+- This is a pure presentational component. It has no internal state or event handlers beyond what the browser provides for `<a>` elements.

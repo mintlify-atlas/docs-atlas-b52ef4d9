@@ -1,0 +1,210 @@
+---
+title: 'Project structure'
+description: 'A guide to the directory layout and key files in allocazione.dev.'
+keywords: ['file structure', 'sveltekit', 'project layout', 'lib', 'routes']
+---
+
+allocazione.dev follows standard SvelteKit conventions with a clear separation between reusable library code (`src/lib/`) and page-level route files (`src/routes/`).
+
+## Directory tree
+
+<Tree>
+  <Tree.Folder name="src" defaultOpen>
+    <Tree.Folder name="lib" defaultOpen>
+      <Tree.Folder name="actions">
+        <Tree.File name="tooltip.js" />
+      </Tree.Folder>
+      <Tree.Folder name="components" defaultOpen>
+        <Tree.Folder name="ui">
+          <Tree.File name="Button.svelte" />
+          <Tree.File name="Nav.svelte" />
+          <Tree.File name="Ticker.svelte" />
+        </Tree.Folder>
+        <Tree.Folder name="widgets">
+          <Tree.File name="Clock.svelte" />
+          <Tree.File name="StatsFM.svelte" />
+        </Tree.Folder>
+      </Tree.Folder>
+      <Tree.Folder name="locales" defaultOpen>
+        <Tree.Folder name="data">
+          <Tree.File name="en.json" />
+        </Tree.Folder>
+        <Tree.File name="i18n.js" />
+      </Tree.Folder>
+      <Tree.File name="config.js" />
+      <Tree.File name="state.svelte.js" />
+    </Tree.Folder>
+    <Tree.Folder name="routes" defaultOpen>
+      <Tree.File name="+layout.svelte" />
+      <Tree.File name="+layout.js" />
+      <Tree.File name="+page.svelte" />
+      <Tree.File name="+error.svelte" />
+      <Tree.Folder name="projects">
+        <Tree.File name="+page.svelte" />
+        <Tree.File name="+page.server.js" />
+      </Tree.Folder>
+      <Tree.Folder name="contact">
+        <Tree.File name="+page.svelte" />
+      </Tree.Folder>
+      <Tree.Folder name="uses">
+        <Tree.File name="+page.svelte" />
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.File name="app.css" />
+    <Tree.File name="hooks.server.js" />
+  </Tree.Folder>
+  <Tree.File name="svelte.config.js" />
+  <Tree.File name="vite.config.js" />
+  <Tree.File name="package.json" />
+</Tree>
+
+## `src/lib/`
+
+All reusable, non-route code lives in `src/lib/`. SvelteKit automatically makes this directory available via the `$lib` alias, so you can import from anywhere in `src/` without relative path traversal.
+
+### `src/lib/actions/`
+
+Contains Svelte [actions](https://svelte.dev/docs/svelte-action) — functions that run imperative DOM logic when an element is mounted.
+
+| File | Purpose |
+|------|---------|
+| `tooltip.js` | Attaches a tooltip to a DOM element, handling pointer events and positioning |
+
+### `src/lib/components/ui/`
+
+Atomic, reusable UI primitives with no business logic. These components are general-purpose and appear across multiple pages.
+
+| Component | Purpose |
+|-----------|---------|
+| `Button.svelte` | Styled button element with variant and size props |
+| `Nav.svelte` | Top navigation bar with route links |
+| `Ticker.svelte` | Horizontally scrolling text strip (`ScrollingText`) |
+
+### `src/lib/components/widgets/`
+
+Integrated feature modules that fetch data or maintain their own state. Widgets are composed directly into page layouts.
+
+| Component | Purpose |
+|-----------|---------|
+| `Clock.svelte` | Displays a live local time widget |
+| `StatsFM.svelte` | Shows currently playing or recently played music via stats.fm |
+
+### `src/lib/locales/`
+
+Handles internationalization (i18n) using `svelte-i18n`.
+
+| Path | Purpose |
+|------|---------|
+| `locales/data/en.json` | English translation strings (the primary locale) |
+| `locales/i18n.js` | Registers locales and initializes the `svelte-i18n` store |
+
+## Key files
+
+### `src/lib/config.js`
+
+The single source of truth for site-wide static data — social links, project metadata, navigation items, and any other configuration that is referenced across multiple components. Import it with:
+
+```javascript
+import config from '$lib/config.js';
+```
+
+### `src/lib/state.svelte.js`
+
+Holds shared reactive state using Svelte 5's `$state` rune. Currently tracks the active accent color and its RGB equivalent, which are injected server-side and then synced to the client:
+
+```javascript
+export const themeState = $state({
+    accentColor: null,
+    accentRgb: null
+});
+```
+
+Any component can import `themeState` and read or write `themeState.accentColor` directly. Because this uses a Svelte 5 rune, mutations are automatically reactive.
+
+### `src/hooks.server.js`
+
+SvelteKit server hooks run on every request. This file:
+
+1. Reads the `accent_color` cookie (defaulting to `#e16666`).
+2. Converts the hex value to an `r, g, b` string.
+3. Replaces `%accent%` and `%accent_rgb%` placeholders in the HTML template.
+4. Attaches security headers (`X-Frame-Options`, `Content-Security-Policy`, etc.) to every response.
+
+```javascript
+export const handle = async ({ event, resolve }) => {
+  const accentColor = event.cookies.get('accent_color') || '#e16666';
+  // ... hex to RGB conversion ...
+  const response = await resolve(event, {
+    transformPageChunk: ({ html }) =>
+      html
+        .replace('%accent%', accentColor)
+        .replace('%accent_rgb%', accentRgb)
+  });
+  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  // ... additional security headers ...
+  return response;
+};
+```
+
+### `src/app.css`
+
+Global stylesheet imported by `+layout.svelte`. It:
+
+- Imports Tailwind CSS 4 via `@import "tailwindcss"`.
+- Defines CSS custom properties for the accent color system (`--accent`, `--accent-rgb`).
+- Declares the `animate-page-in` keyframe animation.
+- Sets base typographic and layout defaults.
+
+See [Theming](/architecture/theming) for a detailed breakdown of the design tokens.
+
+## `src/routes/`
+
+All page and layout files follow SvelteKit's file-based routing conventions.
+
+| Filename | Role |
+|----------|------|
+| `+page.svelte` | The UI component rendered for a given route |
+| `+page.server.js` | Server-only data loading; exports a `load` function |
+| `+layout.svelte` | Shared wrapper rendered around every child route |
+| `+layout.js` | Client/universal layout config; enables `prerender` |
+| `+error.svelte` | Custom error page rendered on 4xx/5xx responses |
+
+## Configuration files
+
+### `svelte.config.js`
+
+Configures the SvelteKit adapter and Svelte compiler options. The project uses `@sveltejs/adapter-static` to output a fully pre-rendered static site:
+
+```javascript
+import adapter from '@sveltejs/adapter-static';
+
+export default {
+  kit: {
+    adapter: adapter()
+  }
+};
+```
+
+### `vite.config.js`
+
+Configures Vite. The `@sveltejs/vite-plugin-svelte` plugin compiles `.svelte` files, and `@tailwindcss/vite` handles Tailwind CSS 4's build pipeline.
+
+### `package.json`
+
+Defines the project's dependencies and scripts:
+
+```json
+{
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''"
+  },
+  "dependencies": {
+    "animejs": "^4.3.6",
+    "simple-icons": "^16.11.0",
+    "svelte-i18n": "^4.0.1"
+  }
+}
+```

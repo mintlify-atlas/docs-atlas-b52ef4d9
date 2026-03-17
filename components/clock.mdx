@@ -1,0 +1,113 @@
+---
+title: 'Clock'
+description: 'A live clock widget that displays the current time in Bologna, Italy, using the Ticker component for animated digit transitions.'
+keywords: ['clock', 'time', 'widget', 'ticker', 'real-time', 'component']
+---
+
+The `Clock` widget displays the current local time, updated every second. It delegates digit rendering to the `Ticker` component, producing a smooth animated transition for each digit as the time changes. When the card containing the clock is hovered, a soft white radial glow appears behind the display.
+
+## Source
+
+`src/lib/components/widgets/Clock.svelte`
+
+```svelte src/lib/components/widgets/Clock.svelte
+<script>
+  import Ticker from '../ui/Ticker.svelte';
+
+  let time = $state('00:00:00');
+
+  function updateTime() {
+    const now = new Date();
+    time = now.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+  }
+
+  $effect(() => {
+    updateTime();
+    let interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  });
+</script>
+```
+
+## Props
+
+The `Clock` component accepts **no props**. Time is sourced from the browser's `Date` API.
+
+## Dependencies
+
+| Import | Purpose |
+|---|---|
+| `../ui/Ticker.svelte` | Renders the animated digit slots |
+
+## How it works
+
+### Time format
+
+Time is formatted with `toLocaleTimeString('en-GB', { hour12: false })`, which produces a 24-hour `HH:MM:SS` string with zero-padded values (e.g. `09:04:07`). The `en-GB` locale is used to guarantee `HH:MM:SS` format regardless of the user's system locale.
+
+### Reactive interval
+
+The `$effect` rune fires on mount, calls `updateTime()` immediately to avoid a one-second blank state, starts a `setInterval` at 1000 ms, and returns a cleanup function that clears the interval when the component is destroyed:
+
+```svelte
+$effect(() => {
+  updateTime();
+  let interval = setInterval(updateTime, 1000);
+  return () => clearInterval(interval);
+});
+```
+
+<Note>
+  The interval is set to 1000 ms, which means drift can accumulate over time. The clock may occasionally skip or repeat a second visually, but it re-syncs on the next `Date` call. This is acceptable for a decorative display.
+</Note>
+
+### Hover glow
+
+A `div` with `bg-white/3` and `blur-[50px]` is absolutely positioned at the center of the widget. Its `opacity` is `0` by default and transitions to `1` when the parent card is hovered. The parent must carry a `group` Tailwind class for this to work:
+
+```css
+/* Inside Clock.svelte <style> block */
+@media (hover: hover) {
+  :global(.group:hover) .clock-glow {
+    opacity: 1;
+  }
+}
+```
+
+The `@media (hover: hover)` guard ensures the glow only activates on devices with a true pointer (not touch-only).
+
+## Usage
+
+```svelte
+<script>
+  import Clock from '$lib/components/widgets/Clock.svelte';
+</script>
+
+<!-- The parent must have the `group` class for the hover glow to work -->
+<div class="group rounded-3xl border border-[#252525] p-6">
+  <Clock />
+</div>
+```
+
+<Warning>
+  The `Clock` component reads the client's system clock via `new Date()`. In SSR/SSG environments the initial `time` value is `'00:00:00'`. The `$effect` that starts the interval only runs in the browser, so the displayed time will always be correct after hydration.
+</Warning>
+
+## Location label
+
+Below the clock face, a fixed label reads `in Bologna, Italy`. This is hardcoded in the template — there is no prop to change it. If you are adapting this component for a different location, edit the text directly in `src/lib/components/widgets/Clock.svelte`.
+
+```svelte
+<span class="text-[10px] text-gray-500 tracking-widest mt-1">
+  in Bologna, Italy
+</span>
+```
+
+## Visual layout
+
+The component is `flex flex-col h-full items-center justify-center`, making it fill and center within whatever card or container wraps it. Digit color is `text-accent` — it inherits the site's dynamic accent color.

@@ -1,0 +1,91 @@
+---
+title: 'Stats.fm integration'
+description: 'How the StatsFM widget fetches and displays live music activity from the Stats.fm API.'
+keywords: ['stats.fm', 'music', 'now playing', 'widget', 'api', 'last.fm']
+---
+
+The `StatsFM` widget surfaces live music activity on the home page by querying the [Stats.fm](https://stats.fm) API. It shows the currently playing or most recently played track, including album art, track name, and artist.
+
+## Configuration
+
+The Stats.fm username is set in `src/lib/config.js`:
+
+```js
+// src/lib/config.js
+export const siteConfig = {
+  statsFmUser: 'iriel',
+  // ...
+};
+```
+
+<ParamField path="siteConfig.statsFmUser" type="string" required>
+  Your Stats.fm username. This is the account whose listening history is displayed in the widget.
+</ParamField>
+
+## API endpoint
+
+The widget fetches from the Stats.fm beta API:
+
+```
+https://beta-api.stats.fm/api/v1/users/{username}/streams/current
+```
+
+This endpoint returns the user's current stream (if actively listening) or their most recent stream.
+
+<Note>
+  Stats.fm uses a `beta-api` subdomain. The production API domain may change as the service matures. If the widget stops working, check whether the endpoint URL needs updating in `src/lib/components/widgets/StatsFM.svelte`.
+</Note>
+
+## Widget component
+
+The widget lives at `src/lib/components/widgets/StatsFM.svelte`. It:
+
+1. Fetches stream data from the Stats.fm API on mount.
+2. Extracts the track name, artist, and album art URL from the response.
+3. Renders a card with the album art image, track name, and artist name.
+4. Falls back gracefully if the API is unreachable or returns no data.
+
+### Graceful fallback
+
+If the fetch fails or returns an empty response (for example, the user has not listened to anything recently or the API is down), the widget either hides itself or renders a placeholder state. No error is surfaced to the visitor.
+
+## CSP allowlist
+
+The site's Content Security Policy (configured in `hooks.server.js`) must explicitly allow connections to the Stats.fm API and its CDN for images. The relevant directives are:
+
+| Directive | Value |
+|-----------|-------|
+| `connect-src` | `https://beta-api.stats.fm` |
+| `img-src` | `https://cdn.stats.fm` |
+
+If you see CSP violation errors in the browser console related to Stats.fm, check that these origins are present in the `connect-src` and `img-src` directives in `hooks.server.js`.
+
+<Warning>
+  Removing or changing these CSP entries will cause the widget to silently fail in browsers that enforce the policy.
+</Warning>
+
+## Changing the Stats.fm username
+
+<Steps>
+  <Step title="Update siteConfig">
+    Open `src/lib/config.js` and change the `statsFmUser` value to your Stats.fm username:
+
+    ```js
+    export const siteConfig = {
+      statsFmUser: 'your-username',
+    };
+    ```
+  </Step>
+
+  <Step title="Verify your Stats.fm account is public">
+    The Stats.fm API only returns stream data for public accounts. Log in to [stats.fm](https://stats.fm) and ensure your profile and listening history are set to public in your privacy settings.
+  </Step>
+
+  <Step title="Test the widget locally">
+    Run `npm run dev` and open the home page. The StatsFM widget should display your recent listening activity. If it shows nothing, open the browser console and look for network errors on the `beta-api.stats.fm` request.
+  </Step>
+</Steps>
+
+## Disabling the widget
+
+If you do not want to display music activity, remove or comment out the `<StatsFM />` usage in the home page component. No other changes are required — the `siteConfig.statsFmUser` field is only read by the widget.
