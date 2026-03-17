@@ -1,0 +1,67 @@
+{
+  "projectType": "frontend",
+  "projectName": "allocazione.dev",
+  "projectDescription": "A personal portfolio and developer hub built with Svelte 5 and SvelteKit, featuring a projects archive, contact hub, and a /uses page, with multilingual support and a dynamic accent color theming system.",
+  "theme": "willow",
+  "primaryColor": "#e16666",
+  "lightColor": null,
+  "darkColor": "#0f0f0f",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "groups": [
+          { "group": "Get Started", "pages": ["introduction", "quickstart"] },
+          { "group": "Architecture", "pages": ["architecture/project-structure", "architecture/routing", "architecture/theming"] }
+        ]
+      },
+      {
+        "tab": "Core Systems",
+        "groups": [
+          { "group": "Internationalization", "pages": ["systems/i18n"] },
+          { "group": "Data Integration", "pages": ["systems/github-integration", "systems/statsfm-integration"] },
+          { "group": "Theming", "pages": ["systems/accent-color"] }
+        ]
+      },
+      {
+        "tab": "Components",
+        "groups": [
+          { "group": "UI Elements", "pages": ["components/button", "components/nav", "components/ticker", "components/scrolling-text"] },
+          { "group": "Widgets", "pages": ["components/clock", "components/project-card", "components/statsfm"] }
+        ]
+      },
+      {
+        "tab": "Configuration",
+        "groups": [
+          { "group": "Site Config", "pages": ["configuration/site-config"] },
+          { "group": "Deployment", "pages": ["configuration/deployment"] }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Static site generation via SvelteKit with Svelte 5 Runes reactivity",
+    "Dynamic accent color theming persisted via cookies with SSR FOUC prevention",
+    "Multilingual support (EN, IT, DE, ES) using svelte-i18n with lazy locale loading",
+    "GitHub API integration with in-memory caching for the projects archive",
+    "Stats.fm API integration for live music activity display",
+    "Responsive bento-grid layout with glassmorphism UI style",
+    "/uses page documenting hardware, software, and development setup",
+    "Security-hardened HTTP headers including CSP, X-Frame-Options, and Permissions-Policy"
+  ],
+  "publicApiSurface": [
+    "siteConfig (src/lib/config.js)",
+    "themeState (src/lib/state.svelte.js)",
+    "handle hook (src/hooks.server.js)",
+    "Button component (src/lib/components/ui/Button.svelte)",
+    "Nav component (src/lib/components/ui/Nav.svelte)",
+    "Ticker component (src/lib/components/ui/Ticker.svelte)",
+    "ScrollingText component (src/lib/components/ui/ScrollingText.svelte)",
+    "Clock widget (src/lib/components/widgets/Clock.svelte)",
+    "ProjectCard widget (src/lib/components/widgets/ProjectCard.svelte)",
+    "StatsFM widget (src/lib/components/widgets/StatsFM.svelte)",
+    "tooltip action (src/lib/actions/tooltip.js)",
+    "i18n initializer (src/lib/locales/i18n.js)",
+    "projects load function (src/routes/projects/+page.server.js)"
+  ]
+}
